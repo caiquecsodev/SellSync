@@ -35,9 +35,6 @@ const TIER_ID_MAP: Record<string, Tier> = {
 // v1: { tier: 'ouro' }
 // v2: { tier_id: '3_gold' } // 1_bronze | 2_silver | 3_gold
 // v3: { merchant: { tier_id: '2_silver' } }
-//
-// Retorna 'sem_nivel' (em vez de assumir 'ouro') sempre que o formato não é reconhecido ou o
-// nível informado não corresponde a um tier válido — nunca inventamos um nível.
 export function resolveTier(input: unknown): Tier | 'sem_nivel' {
   const o = (input ?? {}) as Record<string, any>;
 
