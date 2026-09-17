@@ -29,8 +29,6 @@ function pick<T>(rand: () => number, arr: readonly T[]): T {
   return arr[Math.floor(rand() * arr.length)];
 }
 
-// Strings garantidamente fora do domínio válido ('ouro'/'prata'/'bronze' ou os códigos v2/v3) —
-// nenhuma delas coincide, de propósito, com um valor reconhecido.
 function randomGarbageString(rand: () => number): string {
   const options = ['', ' ', 'ouro ', 'OURO', 'gold', '4_platinum', 'null', 'undefined', '0', '-1', 'NaN'];
   return pick(rand, options);
@@ -100,8 +98,6 @@ describe('fuzz: resolveTier/computeProfit nunca inventam nível nem quebram', ()
         throw new Error(`${ctx} resolveTier lançou exceção inesperada: ${String(err)}`);
       }
 
-      // Invariante principal: o nível resolvido tem que bater com o que a API realmente informou —
-      // nunca pode "cair" para um nível diferente do esperado (é isso que barra o bug de inventar 'ouro').
       if (tier !== expectedTier) {
         throw new Error(`${ctx} resolveTier devolveu "${tier}", esperado "${expectedTier}"`);
       }
