@@ -6,9 +6,9 @@ export type FeeTable = FeeRow[];
 
 export interface OrderRow {
   id: string;
-  total: number; // valor do pedido
-  cost: number; // custo dos insumos
-  commissionPct: number; // comissão do app, ex.: 0.23
+  total: number;
+  cost: number;
+  commissionPct: number;
   band: DistanceBand;
 }
 
@@ -31,10 +31,6 @@ const TIER_ID_MAP: Record<string, Tier> = {
   '3_gold': 'ouro',
 };
 
-// O app de delivery devolve o nível do restaurante em formatos diferentes conforme a versão da API:
-// v1: { tier: 'ouro' }
-// v2: { tier_id: '3_gold' } // 1_bronze | 2_silver | 3_gold
-// v3: { merchant: { tier_id: '2_silver' } }
 export function resolveTier(input: unknown): Tier | 'sem_nivel' {
   const o = (input ?? {}) as Record<string, any>;
 
@@ -67,7 +63,6 @@ export function computeProfit(order: OrderRow, tierInput: unknown, fees: FeeTabl
   };
 }
 
-// dados de exemplo (um restaurante, 3 pedidos, nível vindo da API v2: { tier_id: '3_gold' })
 export const fees: FeeTable = [
   { tier: 'ouro', band: 'ate_2km', value: 4.90 },
   { tier: 'ouro', band: 'ate_5km', value: 7.50 },

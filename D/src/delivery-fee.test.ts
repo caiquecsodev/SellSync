@@ -56,3 +56,13 @@ describe('bug: nível desconhecido é tratado como "ouro" em vez de "sem_nivel"'
     expect(result.tier).toBe('sem_nivel');
   });
 });
+
+describe('cálculo de lucro', () => {
+  test('lucro do pedido P-1 (nível ouro, 10km) desconta corretamente comissão e taxa de entrega', () => {
+    const order = orders[0]; // total: 84.00, cost: 31.00, commissionPct: 0.23
+    const result = computeProfit(order, tierFromApi, fees); // tier_id 3_gold -> ouro, taxa 10km = 11.20
+
+    // 84.00 - 31.00 - (84.00 * 0.23) - 11.20 = 22.48
+    expect(result.profit).toBeCloseTo(22.48, 2);
+  });
+});
