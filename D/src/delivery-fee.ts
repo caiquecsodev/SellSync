@@ -19,18 +19,38 @@ export interface ProfitResult {
   profit: number;
 }
 
+const VALID_TIERS: readonly Tier[] = ['ouro', 'prata', 'bronze'];
+
+function isValidTier(value: string): value is Tier {
+  return (VALID_TIERS as readonly string[]).includes(value);
+}
+
+const TIER_ID_MAP: Record<string, Tier> = {
+  '1_bronze': 'bronze',
+  '2_silver': 'prata',
+  '3_gold': 'ouro',
+};
+
 // O app de delivery devolve o nível do restaurante em formatos diferentes conforme a versão da API:
 // v1: { tier: 'ouro' }
 // v2: { tier_id: '3_gold' } // 1_bronze | 2_silver | 3_gold
 // v3: { merchant: { tier_id: '2_silver' } }
-export function resolveTier(input: unknown): string {
+//
+// Retorna 'sem_nivel' (em vez de assumir 'ouro') sempre que o formato não é reconhecido ou o
+// nível informado não corresponde a um tier válido — nunca inventamos um nível.
+export function resolveTier(input: unknown): Tier | 'sem_nivel' {
   const o = (input ?? {}) as Record<string, any>;
-  if (typeof o.tier === 'string') return o.tier;
-  if (typeof o.tier_id === 'string') return o.tier_id;
-  if (o.merchant && typeof o.merchant.tier_id === 'string') {
-    return o.merchant.tier_id;
+
+  if (typeof o.tier === 'string' && isValidTier(o.tier)) {
+    return o.tier;
   }
-  return 'ouro';
+  if (typeof o.tier_id === 'string' && TIER_ID_MAP[o.tier_id]) {
+    return TIER_ID_MAP[o.tier_id];
+  }
+  if (o.merchant && typeof o.merchant.tier_id === 'string' && TIER_ID_MAP[o.merchant.tier_id]) {
+    return TIER_ID_MAP[o.merchant.tier_id];
+  }
+  return 'sem_nivel';
 }
 
 export function getDeliveryFee(fees: FeeTable, tier: string, band: DistanceBand): number {
@@ -45,7 +65,7 @@ export function computeProfit(order: OrderRow, tierInput: unknown, fees: FeeTabl
   return {
     orderId: order.id,
     deliveryFee,
-    tier: (tier as Tier) ?? 'sem_nivel',
+    tier,
     profit: order.total - order.cost - commission - deliveryFee,
   };
 }
