@@ -1,18 +1,17 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { computeProfit, fees, orders, resolveTier, tierFromApi } from './delivery-fee';
 
 describe('bug: taxa de entrega some quando o nível vem em formato v2/v3', () => {
   test('pedido P-1 (10km) com nível vindo em formato v2 (tier_id) não deveria ter taxa R$0,00', () => {
-    const order = orders[0]; // P-1, ate_10km
+    const order = orders[0];
     const result = computeProfit(order, tierFromApi, fees);
 
-    // Sintoma relatado: taxa aparece R$0,00. O correto seria a taxa ouro/10km = 11.20.
     expect(result.deliveryFee).not.toBe(0);
     expect(result.deliveryFee).toBe(11.20);
   });
 
   test('pedido P-2 (5km) com nível vindo em formato v2 (tier_id) não deveria ter taxa R$0,00', () => {
-    const order = orders[1]; // P-2, ate_5km
+    const order = orders[1];
     const result = computeProfit(order, tierFromApi, fees);
 
     expect(result.deliveryFee).not.toBe(0);
@@ -20,7 +19,7 @@ describe('bug: taxa de entrega some quando o nível vem em formato v2/v3', () =>
   });
 
   test('nível em formato v3 (merchant.tier_id) também deve resolver a taxa corretamente', () => {
-    const order = orders[2]; // P-3, ate_2km
+    const order = orders[2];
     const result = computeProfit(order, { merchant: { tier_id: '2_silver' } }, fees);
 
     expect(result.tier).toBe('prata');
@@ -28,7 +27,7 @@ describe('bug: taxa de entrega some quando o nível vem em formato v2/v3', () =>
   });
 
   test('nível em formato v2 bronze (1_bronze) deve resolver para o tier "bronze"', () => {
-    const order = orders[2]; // P-3, ate_2km
+    const order = orders[2];
     const result = computeProfit(order, { tier_id: '1_bronze' }, fees);
 
     expect(result.tier).toBe('bronze');
@@ -40,7 +39,6 @@ describe('bug: nível desconhecido é tratado como "ouro" em vez de "sem_nivel"'
   test('formato totalmente desconhecido não deve virar "ouro" por padrão', () => {
     const tier = resolveTier({ nivel_reportado: 'algo_novo' });
 
-    // Regra de negócio: sem nível reconhecido, o resultado tem que ser 'sem_nivel', nunca assumir 'ouro'.
     expect(tier).not.toBe('ouro');
     expect(tier).toBe('sem_nivel');
   });
@@ -56,5 +54,50 @@ describe('bug: nível desconhecido é tratado como "ouro" em vez de "sem_nivel"'
     const result = computeProfit(order, { formato_novo: true }, fees);
 
     expect(result.tier).toBe('sem_nivel');
+  });
+});
+
+describe('cálculo de lucro', () => {
+  test('lucro do pedido P-1 (nível ouro, 10km) desconta corretamente comissão e taxa de entrega', () => {
+    const order = orders[0];
+    const result = computeProfit(order, tierFromApi, fees);
+
+    expect(result.profit).toBeCloseTo(22.48, 2);
+  });
+});
+
+describe('aviso de drift', () => {
+  test('tier_id desconhecido gera log estruturado com o código recebido', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    resolveTier({ tier_id: '9_platinum' });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(parsed).toEqual({ event: 'delivery_fee.tier_id_drift', source: 'tier_id', tierId: '9_platinum' });
+
+    warnSpy.mockRestore();
+  });
+
+  test('merchant.tier_id desconhecido gera log estruturado com o código recebido', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    resolveTier({ merchant: { tier_id: '4_diamond' } });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(parsed).toEqual({ event: 'delivery_fee.tier_id_drift', source: 'merchant.tier_id', tierId: '4_diamond' });
+
+    warnSpy.mockRestore();
+  });
+
+  test('tier_id reconhecido não gera log de drift', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    resolveTier({ tier_id: '3_gold' });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });

@@ -6,9 +6,9 @@ export type FeeTable = FeeRow[];
 
 export interface OrderRow {
   id: string;
-  total: number; // valor do pedido
-  cost: number; // custo dos insumos
-  commissionPct: number; // comissão do app, ex.: 0.23
+  total: number;
+  cost: number;
+  commissionPct: number;
   band: DistanceBand;
 }
 
@@ -19,18 +19,39 @@ export interface ProfitResult {
   profit: number;
 }
 
-// O app de delivery devolve o nível do restaurante em formatos diferentes conforme a versão da API:
-// v1: { tier: 'ouro' }
-// v2: { tier_id: '3_gold' } // 1_bronze | 2_silver | 3_gold
-// v3: { merchant: { tier_id: '2_silver' } }
-export function resolveTier(input: unknown): string {
+const VALID_TIERS: readonly Tier[] = ['ouro', 'prata', 'bronze'];
+
+function isValidTier(value: string): value is Tier {
+  return (VALID_TIERS as readonly string[]).includes(value);
+}
+
+const TIER_ID_MAP: Record<string, Tier> = {
+  '1_bronze': 'bronze',
+  '2_silver': 'prata',
+  '3_gold': 'ouro',
+};
+
+function logTierIdDrift(source: 'tier_id' | 'merchant.tier_id', tierId: string): void {
+  console.warn(JSON.stringify({ event: 'delivery_fee.tier_id_drift', source, tierId }));
+}
+
+export function resolveTier(input: unknown): Tier | 'sem_nivel' {
   const o = (input ?? {}) as Record<string, any>;
-  if (typeof o.tier === 'string') return o.tier;
-  if (typeof o.tier_id === 'string') return o.tier_id;
-  if (o.merchant && typeof o.merchant.tier_id === 'string') {
-    return o.merchant.tier_id;
+
+  if (typeof o.tier === 'string' && isValidTier(o.tier)) {
+    return o.tier;
   }
-  return 'ouro';
+  if (typeof o.tier_id === 'string') {
+    const mapped = TIER_ID_MAP[o.tier_id];
+    if (mapped) return mapped;
+    logTierIdDrift('tier_id', o.tier_id);
+  }
+  if (o.merchant && typeof o.merchant.tier_id === 'string') {
+    const mapped = TIER_ID_MAP[o.merchant.tier_id];
+    if (mapped) return mapped;
+    logTierIdDrift('merchant.tier_id', o.merchant.tier_id);
+  }
+  return 'sem_nivel';
 }
 
 export function getDeliveryFee(fees: FeeTable, tier: string, band: DistanceBand): number {
@@ -45,12 +66,11 @@ export function computeProfit(order: OrderRow, tierInput: unknown, fees: FeeTabl
   return {
     orderId: order.id,
     deliveryFee,
-    tier: (tier as Tier) ?? 'sem_nivel',
+    tier,
     profit: order.total - order.cost - commission - deliveryFee,
   };
 }
 
-// dados de exemplo (um restaurante, 3 pedidos, nível vindo da API v2: { tier_id: '3_gold' })
 export const fees: FeeTable = [
   { tier: 'ouro', band: 'ate_2km', value: 4.90 },
   { tier: 'ouro', band: 'ate_5km', value: 7.50 },
