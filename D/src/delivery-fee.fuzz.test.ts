@@ -1,4 +1,4 @@
-import { describe, test } from 'vitest';
+import { describe, test, vi } from 'vitest';
 import { computeProfit, fees, orders, resolveTier, type Tier } from './delivery-fee';
 
 function mulberry32(seed: number) {
@@ -84,49 +84,54 @@ function generateScenario(rand: () => number): Scenario {
 
 describe('fuzz: resolveTier/computeProfit nunca inventam nível nem quebram', () => {
   test(`gera ${SCENARIOS} cenários com seed=${SEED} e verifica invariantes`, () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const rand = mulberry32(SEED);
 
-    for (let i = 1; i <= SCENARIOS; i++) {
-      const { tierInput, expectedTier } = generateScenario(rand);
-      const order = pick(rand, orders);
-      const ctx = `[seed=${SEED} cenario=${i}] tierInput=${JSON.stringify(tierInput)} expectedTier=${expectedTier} order=${order.id}`;
+    try {
+      for (let i = 1; i <= SCENARIOS; i++) {
+        const { tierInput, expectedTier } = generateScenario(rand);
+        const order = pick(rand, orders);
+        const ctx = `[seed=${SEED} cenario=${i}] tierInput=${JSON.stringify(tierInput)} expectedTier=${expectedTier} order=${order.id}`;
 
-      let tier: ExpectedTier;
-      try {
-        tier = resolveTier(tierInput);
-      } catch (err) {
-        throw new Error(`${ctx} resolveTier lançou exceção inesperada: ${String(err)}`);
+        let tier: ExpectedTier;
+        try {
+          tier = resolveTier(tierInput);
+        } catch (err) {
+          throw new Error(`${ctx} resolveTier lançou exceção inesperada: ${String(err)}`);
+        }
+
+        if (tier !== expectedTier) {
+          throw new Error(`${ctx} resolveTier devolveu "${tier}", esperado "${expectedTier}"`);
+        }
+
+        const result = computeProfit(order, tierInput, fees);
+
+        if (result.tier !== tier) {
+          throw new Error(`${ctx} computeProfit.tier (${result.tier}) diverge de resolveTier (${tier})`);
+        }
+
+        if (!Number.isFinite(result.deliveryFee)) {
+          throw new Error(`${ctx} deliveryFee não é um número finito: ${result.deliveryFee}`);
+        }
+
+        if (tier === 'sem_nivel' && result.deliveryFee !== 0) {
+          throw new Error(`${ctx} nível desconhecido não pode gerar taxa inventada, mas deliveryFee=${result.deliveryFee}`);
+        }
+
+        const expectedRow = fees.find(f => f.tier === tier && f.band === order.band);
+        const expectedFee = expectedRow ? expectedRow.value : 0;
+        if (result.deliveryFee !== expectedFee) {
+          throw new Error(`${ctx} deliveryFee (${result.deliveryFee}) diverge da tabela de taxas (esperado ${expectedFee})`);
+        }
+
+        const expectedCommission = order.total * order.commissionPct;
+        const expectedProfit = order.total - order.cost - expectedCommission - result.deliveryFee;
+        if (!Number.isFinite(result.profit) || Math.abs(result.profit - expectedProfit) > 1e-9) {
+          throw new Error(`${ctx} profit (${result.profit}) diverge do esperado (${expectedProfit})`);
+        }
       }
-
-      if (tier !== expectedTier) {
-        throw new Error(`${ctx} resolveTier devolveu "${tier}", esperado "${expectedTier}"`);
-      }
-
-      const result = computeProfit(order, tierInput, fees);
-
-      if (result.tier !== tier) {
-        throw new Error(`${ctx} computeProfit.tier (${result.tier}) diverge de resolveTier (${tier})`);
-      }
-
-      if (!Number.isFinite(result.deliveryFee)) {
-        throw new Error(`${ctx} deliveryFee não é um número finito: ${result.deliveryFee}`);
-      }
-
-      if (tier === 'sem_nivel' && result.deliveryFee !== 0) {
-        throw new Error(`${ctx} nível desconhecido não pode gerar taxa inventada, mas deliveryFee=${result.deliveryFee}`);
-      }
-
-      const expectedRow = fees.find(f => f.tier === tier && f.band === order.band);
-      const expectedFee = expectedRow ? expectedRow.value : 0;
-      if (result.deliveryFee !== expectedFee) {
-        throw new Error(`${ctx} deliveryFee (${result.deliveryFee}) diverge da tabela de taxas (esperado ${expectedFee})`);
-      }
-
-      const expectedCommission = order.total * order.commissionPct;
-      const expectedProfit = order.total - order.cost - expectedCommission - result.deliveryFee;
-      if (!Number.isFinite(result.profit) || Math.abs(result.profit - expectedProfit) > 1e-9) {
-        throw new Error(`${ctx} profit (${result.profit}) diverge do esperado (${expectedProfit})`);
-      }
+    } finally {
+      warnSpy.mockRestore();
     }
   });
 });

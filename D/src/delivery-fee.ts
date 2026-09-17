@@ -31,17 +31,25 @@ const TIER_ID_MAP: Record<string, Tier> = {
   '3_gold': 'ouro',
 };
 
+function logTierIdDrift(source: 'tier_id' | 'merchant.tier_id', tierId: string): void {
+  console.warn(JSON.stringify({ event: 'delivery_fee.tier_id_drift', source, tierId }));
+}
+
 export function resolveTier(input: unknown): Tier | 'sem_nivel' {
   const o = (input ?? {}) as Record<string, any>;
 
   if (typeof o.tier === 'string' && isValidTier(o.tier)) {
     return o.tier;
   }
-  if (typeof o.tier_id === 'string' && TIER_ID_MAP[o.tier_id]) {
-    return TIER_ID_MAP[o.tier_id];
+  if (typeof o.tier_id === 'string') {
+    const mapped = TIER_ID_MAP[o.tier_id];
+    if (mapped) return mapped;
+    logTierIdDrift('tier_id', o.tier_id);
   }
-  if (o.merchant && typeof o.merchant.tier_id === 'string' && TIER_ID_MAP[o.merchant.tier_id]) {
-    return TIER_ID_MAP[o.merchant.tier_id];
+  if (o.merchant && typeof o.merchant.tier_id === 'string') {
+    const mapped = TIER_ID_MAP[o.merchant.tier_id];
+    if (mapped) return mapped;
+    logTierIdDrift('merchant.tier_id', o.merchant.tier_id);
   }
   return 'sem_nivel';
 }

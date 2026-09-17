@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { computeProfit, fees, orders, resolveTier, tierFromApi } from './delivery-fee';
 
 describe('bug: taxa de entrega some quando o nível vem em formato v2/v3', () => {
@@ -63,5 +63,41 @@ describe('cálculo de lucro', () => {
     const result = computeProfit(order, tierFromApi, fees);
 
     expect(result.profit).toBeCloseTo(22.48, 2);
+  });
+});
+
+describe('aviso de drift', () => {
+  test('tier_id desconhecido gera log estruturado com o código recebido', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    resolveTier({ tier_id: '9_platinum' });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(parsed).toEqual({ event: 'delivery_fee.tier_id_drift', source: 'tier_id', tierId: '9_platinum' });
+
+    warnSpy.mockRestore();
+  });
+
+  test('merchant.tier_id desconhecido gera log estruturado com o código recebido', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    resolveTier({ merchant: { tier_id: '4_diamond' } });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(warnSpy.mock.calls[0][0] as string);
+    expect(parsed).toEqual({ event: 'delivery_fee.tier_id_drift', source: 'merchant.tier_id', tierId: '4_diamond' });
+
+    warnSpy.mockRestore();
+  });
+
+  test('tier_id reconhecido não gera log de drift', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    resolveTier({ tier_id: '3_gold' });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });
